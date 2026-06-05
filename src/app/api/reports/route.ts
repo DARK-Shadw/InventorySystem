@@ -97,38 +97,58 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === "low-stock") {
-    const inventory = await prisma.inventory.findMany({
+    // Start from items (not inventory rows) so items with no stock record
+    // still count as 0 balance. Include anything out of stock OR at/below ROP.
+    const items = await prisma.item.findMany({
+      where: { status: "ACTIVE" },
       include: {
-        item: {
-          select: {
-            itemCode: true, description: true, classDescription: true,
-            reorderPoint: true, economicOrderQty: true, leadTimeDays: true,
-            averageCost: true, criticality: true, manufacturer: true, status: true,
-          },
-        },
-        storeroom: { select: { code: true } },
+        inventoryRecords: { select: { currentBalance: true } },
       },
-      where: { item: { status: "ACTIVE" } },
+      orderBy: { itemCode: "asc" },
     });
 
-    const lowStockItems = inventory
-      .filter((inv) => inv.item.reorderPoint > 0 && inv.currentBalance <= inv.item.reorderPoint)
-      .map((inv) => ({
-        itemCode: inv.item.itemCode,
-        description: inv.item.description,
-        classDescription: inv.item.classDescription,
-        manufacturer: inv.item.manufacturer,
-        currentBalance: inv.currentBalance,
-        reorderPoint: inv.item.reorderPoint,
-        suggestedOrder: inv.item.economicOrderQty,
-        leadTimeDays: inv.item.leadTimeDays,
-        estimatedCost: inv.item.economicOrderQty * Number(inv.item.averageCost),
-        criticality: inv.item.criticality,
-        storeroom: inv.storeroom.code,
+    const rows = items
+      .map((item) => ({
+        item,
+        balance: item.inventoryRecords.reduce((s, r) => s + r.currentBalance, 0),
       }))
-      .sort((a, b) => a.criticality - b.criticality || (a.currentBalance / a.reorderPoint) - (b.currentBalance / b.reorderPoint));
+      .filter(({ item, balance }) => balance <= 0 || balance <= item.reorderPoint)
+      .map(({ item, balance }) => {
+        const suggestedOrder = item.economicOrderQty || item.reorderPoint || 0;
+        return {
+          itemCode: item.itemCode,
+          description: item.description,
+          classDescription: item.classDescription,
+          currentBalance: balance,
+          reorderPoint: item.reorderPoint,
+          suggestedQty: suggestedOrder,
+          leadTimeDays: item.leadTimeDays,
+          estimatedCost: suggestedOrder * Number(item.averageCost),
+          criticality: item.criticality,
+          status: balance <= 0 ? "OUT_OF_STOCK" : "LOW_STOCK",
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.criticality - b.criticality || a.currentBalance - b.currentBalance
+      );
 
-    return NextResponse.json({ type, data: lowStockItems });
+    const critical = rows.filter((r) => r.criticality === 1).length;
+    const suggestedOrderValue = rows.reduce((s, r) => s + r.estimatedCost, 0);
+    const avgLeadTimeDays = rows.length
+      ? Math.round(rows.reduce((s, r) => s + r.leadTimeDays, 0) / rows.length)
+      : 0;
+
+    return NextResponse.json({
+      type,
+      summary: {
+        itemsBelowRop: rows.length,
+        critical,
+        suggestedOrderValue,
+        avgLeadTimeDays,
+      },
+      data: rows,
+    });
   }
 
   if (type === "requisition-history") {

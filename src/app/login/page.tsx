@@ -177,18 +177,8 @@ export default function LoginPage() {
     <div className="grid min-h-dvh place-items-center bg-[oklch(0.93_0.004_80)] px-6 py-8">
       <main className="grid w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 overflow-hidden rounded-3xl bg-surface shadow-[0_1px_2px_oklch(0.5_0.01_70_/_0.05),0_30px_60px_-30px_oklch(0.45_0.02_60_/_0.32)] duration-500 min-[800px]:max-w-[60rem] min-[800px]:min-h-[33rem] min-[800px]:grid-cols-[1.02fr_0.98fr]">
         {/* Left promo — blue gradient mesh */}
-        <aside className="relative isolate m-3 hidden flex-col justify-between overflow-hidden rounded-[1.05rem] p-8 min-[800px]:flex">
+        <aside className="relative isolate m-3 hidden flex-col justify-end overflow-hidden rounded-[1.05rem] p-8 min-[800px]:flex">
           <div className="absolute inset-0 -z-10" style={{ background: PROMO_GRADIENT }} />
-          <span className="inline-flex w-fit items-center rounded-[0.7rem] bg-[oklch(1_0_0_/_0.85)] px-3 py-2 shadow-[0_2px_8px_-4px_oklch(0.2_0.06_260_/_0.35)]">
-            <Image
-              src="/safeen.png"
-              alt="SAFEEN Subsea"
-              width={500}
-              height={150}
-              priority
-              className="h-[1.7rem] w-auto object-contain"
-            />
-          </span>
           <div>
             <p
               className="mb-2.5 text-[0.78rem] font-medium tracking-[0.01em]"

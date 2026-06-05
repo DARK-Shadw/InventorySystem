@@ -7,13 +7,13 @@ import {
   ChevronRight,
   ChevronLeft,
   Check,
-  AlertCircle,
+  TriangleAlert,
   Loader2,
-  X,
+  Plus,
+  RefreshCw,
+  ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { PageHead, Pill, SelectControl } from "@/components/safeen/ui";
 
 interface SheetInfo {
   name: string;
@@ -80,6 +80,8 @@ const AUTO_MAP: Record<string, string[]> = {
   lotType: ["lot type"],
 };
 
+const STEPS = ["Upload", "Select sheet", "Map columns", "Run"];
+
 export default function ImportPage() {
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
@@ -127,8 +129,7 @@ export default function ImportPage() {
       setSelectedSheet(0);
 
       if (data.sheets.length > 0) {
-        const autoMapped = autoMapColumns(data.sheets[0].headers);
-        setMapping(autoMapped);
+        setMapping(autoMapColumns(data.sheets[0].headers));
       }
 
       setStep(2);
@@ -141,8 +142,7 @@ export default function ImportPage() {
 
   function handleSheetSelect(index: number) {
     setSelectedSheet(index);
-    const autoMapped = autoMapColumns(sheets[index].headers);
-    setMapping(autoMapped);
+    setMapping(autoMapColumns(sheets[index].headers));
   }
 
   async function handleImport() {
@@ -192,147 +192,138 @@ export default function ImportPage() {
   }
 
   const currentSheet = sheets[selectedSheet];
+  const mappedCount = Object.values(mapping).filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Import Data</h1>
-        <p className="text-sm text-muted-foreground">
-          Import inventory data from Excel files
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHead
+        eyebrow="Bulk operations"
+        title="Import items"
+        sub="Import inventory from an Excel workbook in four steps."
+      />
 
-      {/* Steps indicator */}
-      <div className="flex items-center gap-2">
-        {["Upload File", "Select Sheet", "Map Columns", "Results"].map(
-          (label, i) => (
-            <div key={label} className="flex items-center gap-2">
-              <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-                  step > i + 1
-                    ? "bg-green-100 text-green-700"
-                    : step === i + 1
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {step > i + 1 ? <Check className="h-4 w-4" /> : i + 1}
+      {/* stepper */}
+      <div className="stepper shrink-0">
+        {STEPS.map((label, i) => {
+          const n = i + 1;
+          const state = step > n ? "done" : step === n ? "on" : "";
+          return (
+            <div key={label} className="contents">
+              <div className={`step ${state}`}>
+                <span className="n">
+                  {step > n ? <Check strokeWidth={3} /> : n}
+                </span>
+                <span className="lbl">{label}</span>
               </div>
-              <span
-                className={`text-sm ${step === i + 1 ? "font-medium" : "text-muted-foreground"}`}
-              >
-                {label}
-              </span>
-              {i < 3 && (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
+              {i < STEPS.length - 1 && <span className="step-line" />}
             </div>
-          )
-        )}
+          );
+        })}
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+        <div className="mb-4 flex shrink-0 items-center gap-2 rounded-[0.65rem] bg-bad-bg px-3 py-2.5 text-[0.82rem] text-bad">
+          <TriangleAlert className="size-4 shrink-0" />
           {error}
         </div>
       )}
 
-      {/* Step 1: Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+
+      {/* stage — header + stepper stay fixed above; each panel scrolls inside */}
+      <div className="flex min-h-0 flex-1 flex-col">
+
+      {/* Step 1 — upload */}
       {step === 1 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="mb-6 rounded-full bg-muted p-4">
-              <Upload className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <h2 className="mb-2 text-lg font-semibold">Upload Excel File</h2>
-            <p className="mb-6 text-sm text-muted-foreground">
-              Supports .xlsx and .xls files
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading}
-              size="lg"
+        <div className="panel">
+          <div className="panel-body">
+            <div
+              className="drop"
+              onClick={() => !loading && fileInputRef.current?.click()}
             >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-              )}
-              {loading ? "Reading file..." : "Choose File"}
-            </Button>
-          </CardContent>
-        </Card>
+              <div className="di">
+                {loading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Upload strokeWidth={1.7} />
+                )}
+              </div>
+              <b>
+                {loading ? "Reading workbook…" : "Drop your .xlsx file here"}
+              </b>
+              <span>or click to browse — .xlsx, .xls up to 10MB</span>
+            </div>
+            <div className="navbtns">
+              <span className="flex-1" />
+              <button
+                className="btn primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <FileSpreadsheet />
+                )}
+                Choose file
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Step 2: Sheet selection */}
+      {/* Step 2 — select sheet */}
       {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Select Sheet — {file?.name}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+        <div className="panel flex min-h-0 flex-1 flex-col">
+          <div className="panel-body flex min-h-0 flex-1 flex-col">
+            <div className="sheetlist shrink-0">
               {sheets.map((sheet, i) => (
                 <button
                   key={sheet.name}
+                  className={`sheetopt ${selectedSheet === i ? "on" : ""}`}
                   onClick={() => handleSheetSelect(i)}
-                  className={`rounded-lg border p-4 text-left transition-colors ${
-                    selectedSheet === i
-                      ? "border-primary bg-primary/5"
-                      : "hover:border-muted-foreground/30"
-                  }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{sheet.name}</span>
-                    <Badge variant="secondary">{sheet.totalRows} rows</Badge>
+                  <span className="si">
+                    <FileSpreadsheet strokeWidth={1.8} />
+                  </span>
+                  <div>
+                    <b className="text-[0.9rem] font-semibold">{sheet.name}</b>
+                    <div className="sub text-[0.78rem] text-subtle">
+                      {sheet.totalRows} rows · {sheet.headers.length} columns
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {sheet.headers.length} columns:{" "}
-                    {sheet.headers.slice(0, 4).join(", ")}
-                    {sheet.headers.length > 4 && "..."}
-                  </p>
+                  <Pill tone="grey" className="ml-auto">
+                    {sheet.headers.length} cols
+                  </Pill>
                 </button>
               ))}
             </div>
 
-            {/* Preview */}
             {currentSheet && (
-              <div>
-                <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                  Data Preview (first 5 rows)
-                </h3>
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full text-xs">
+              <>
+                <div className="mt-5 shrink-0 text-[0.8rem] font-semibold uppercase tracking-[0.03em] text-faint">
+                  Data preview — first {currentSheet.sampleRows.length} rows
+                </div>
+                <div className="tablewrap safeen-scroll mt-2 min-h-0 flex-1 overflow-auto">
+                  <table className="tbl">
                     <thead>
-                      <tr className="border-b bg-muted/50">
+                      <tr>
                         {currentSheet.headers.map((h, i) => (
-                          <th
-                            key={i}
-                            className="whitespace-nowrap px-3 py-2 text-left font-medium"
-                          >
-                            {String(h)}
-                          </th>
+                          <th key={i}>{String(h)}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {currentSheet.sampleRows.map((row, i) => (
-                        <tr key={i} className="border-b">
+                        <tr key={i} style={{ cursor: "default" }}>
                           {currentSheet.headers.map((_, j) => (
-                            <td
-                              key={j}
-                              className="max-w-[200px] truncate whitespace-nowrap px-3 py-1.5"
-                            >
+                            <td key={j} className="max-w-[200px] truncate">
                               {String((row as unknown[])[j] ?? "")}
                             </td>
                           ))}
@@ -341,51 +332,45 @@ export default function ImportPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </>
             )}
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={reset}>
-                <ChevronLeft className="mr-2 h-4 w-4" />
+            <div className="navbtns shrink-0">
+              <button className="btn" onClick={reset}>
+                <ChevronLeft />
                 Back
-              </Button>
-              <Button onClick={() => setStep(3)}>
-                Map Columns
-                <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
+              </button>
+              <span className="flex-1" />
+              <button className="btn primary" onClick={() => setStep(3)}>
+                Map columns
+                <ChevronRight />
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Step 3: Column Mapping */}
+      {/* Step 3 — map columns */}
       {step === 3 && currentSheet && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Map Columns — {currentSheet.name} ({currentSheet.totalRows} rows)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Map your Excel columns to system fields. Auto-detected mappings
+        <div className="panel flex min-h-0 flex-1 flex-col">
+          <div className="panel-body flex min-h-0 flex-1 flex-col">
+            <div className="mb-3 shrink-0 text-[0.85rem] text-subtle">
+              Map spreadsheet columns to SAFEEN fields. Auto-detected mappings
               are pre-filled.
-            </p>
+            </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="safeen-scroll grid min-h-0 flex-1 content-start gap-x-8 overflow-y-auto pr-1 sm:grid-cols-2">
               {FIELD_MAPPINGS.map((field) => (
-                <div
-                  key={field.key}
-                  className="flex items-center justify-between rounded-md border px-3 py-2"
-                >
-                  <label className="text-sm font-medium">
+                <div key={field.key} className="maprow">
+                  <div className="text-[0.86rem] font-medium">
                     {field.label}
-                    {field.required && (
-                      <span className="ml-1 text-red-500">*</span>
-                    )}
-                  </label>
-                  <select
-                    className="w-48 rounded-md border bg-background px-2 py-1 text-sm"
+                    {field.required && <span className="text-brand"> *</span>}
+                  </div>
+                  <div className="arr">
+                    <ArrowRight />
+                  </div>
+                  <SelectControl
+                    variant="inp"
                     value={mapping[field.key] || ""}
                     onChange={(e) =>
                       setMapping((prev) => ({
@@ -394,108 +379,135 @@ export default function ImportPage() {
                       }))
                     }
                   >
-                    <option value="">— Skip —</option>
+                    <option value="">— Not mapped —</option>
                     {currentSheet.headers.map((h) => (
                       <option key={String(h)} value={String(h)}>
                         {String(h)}
                       </option>
                     ))}
-                  </select>
+                  </SelectControl>
                 </div>
               ))}
             </div>
 
-            {/* Mapping summary */}
-            <div className="rounded-md bg-muted/50 p-3">
-              <p className="text-sm font-medium">Mapping Summary</p>
-              <p className="text-xs text-muted-foreground">
-                {Object.values(mapping).filter(Boolean).length} of{" "}
-                {currentSheet.headers.length} columns mapped •{" "}
+            <div className="mt-4 shrink-0 rounded-[0.6rem] border border-line-soft bg-field p-3">
+              <p className="text-[0.85rem] font-medium text-ink">
+                Mapping summary
+              </p>
+              <p className="text-[0.78rem] text-subtle">
+                {mappedCount} of {currentSheet.headers.length} columns mapped ·{" "}
                 {currentSheet.totalRows} rows will be processed
               </p>
             </div>
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep(2)}>
-                <ChevronLeft className="mr-2 h-4 w-4" />
+            <div className="navbtns shrink-0">
+              <button className="btn" onClick={() => setStep(2)}>
+                <ChevronLeft />
                 Back
-              </Button>
-              <Button onClick={handleImport} disabled={importing}>
+              </button>
+              <span className="flex-1" />
+              <button
+                className="btn primary"
+                onClick={handleImport}
+                disabled={importing}
+              >
                 {importing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Upload className="mr-2 h-4 w-4" />
+                  <Upload />
                 )}
-                {importing ? "Importing..." : "Start Import"}
-              </Button>
+                Run import
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Step 4: Results */}
+      {/* Step 4 — results */}
       {step === 4 && result && (
-        <Card>
-          <CardContent className="py-8">
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-4 rounded-full bg-green-100 p-3">
-                <Check className="h-6 w-6 text-green-600" />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="result-cards shrink-0">
+            <div className="mini">
+              <div className="ml">
+                <span className="ic tint-green">
+                  <Plus strokeWidth={2} />
+                </span>
+                New items
               </div>
-              <h2 className="text-lg font-semibold">Import Complete</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Processed {result.total} rows from{" "}
-                {sheets[selectedSheet]?.name}
-              </p>
+              <div className="mv">{result.imported}</div>
             </div>
-
-            <div className="mx-auto mt-6 grid max-w-md grid-cols-3 gap-4">
-              <div className="rounded-lg bg-green-50 p-4 text-center">
-                <p className="text-2xl font-bold text-green-700">
-                  {result.imported}
-                </p>
-                <p className="text-xs text-green-600">New Items</p>
+            <div className="mini">
+              <div className="ml">
+                <span className="ic tint-blue">
+                  <RefreshCw strokeWidth={2} />
+                </span>
+                Updated
               </div>
-              <div className="rounded-lg bg-blue-50 p-4 text-center">
-                <p className="text-2xl font-bold text-blue-700">
-                  {result.updated}
-                </p>
-                <p className="text-xs text-blue-600">Updated</p>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-4 text-center">
-                <p className="text-2xl font-bold text-gray-700">
-                  {result.skipped}
-                </p>
-                <p className="text-xs text-gray-600">Skipped</p>
-              </div>
+              <div className="mv">{result.updated}</div>
             </div>
+            <div className="mini">
+              <div className="ml">
+                <span className="ic tint-amber">
+                  <TriangleAlert strokeWidth={2} />
+                </span>
+                Skipped
+              </div>
+              <div className="mv">{result.skipped}</div>
+            </div>
+          </div>
 
-            {result.errors.length > 0 && (
-              <div className="mx-auto mt-6 max-w-lg">
-                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-600">
-                  <AlertCircle className="h-4 w-4" />
-                  {result.errors.length} Errors
-                </h3>
-                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-red-50 p-3">
-                  {result.errors.map((err, i) => (
-                    <p key={i} className="text-xs text-red-600">
-                      Row {err.row} ({err.code}): {err.error}
-                    </p>
-                  ))}
-                </div>
+          <div className="panel flex min-h-0 flex-1 flex-col">
+            <div className="panel-head shrink-0">
+              <h2>Row errors</h2>
+              <Pill tone={result.errors.length ? "red" : "green"} className="ml-2">
+                {result.errors.length}
+              </Pill>
+            </div>
+            {result.errors.length === 0 ? (
+              <div className="panel-body">
+                <p className="text-[0.85rem] text-subtle">
+                  No row errors — processed {result.total} rows from{" "}
+                  {sheets[selectedSheet]?.name}.
+                </p>
+              </div>
+            ) : (
+              <div className="safeen-scroll min-h-0 flex-1 overflow-y-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "4rem" }}>Row</th>
+                      <th>Code</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.errors.map((err, i) => (
+                      <tr key={i} style={{ cursor: "default" }}>
+                        <td className="tnum">{err.row}</td>
+                        <td className="cellcode">{err.code || "—"}</td>
+                        <td>{err.error}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
+          </div>
 
-            <div className="mt-8 flex justify-center gap-3">
-              <Button variant="outline" onClick={reset}>
-                Import Another File
-              </Button>
-              <a href="/inventory">
-                <Button>View Inventory</Button>
-              </a>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="navbtns shrink-0">
+            <button className="btn" onClick={reset}>
+              <Upload />
+              Import another file
+            </button>
+            <span className="flex-1" />
+            <a className="btn primary" href="/inventory">
+              View inventory
+              <ChevronRight />
+            </a>
+          </div>
+        </div>
       )}
+      </div>
     </div>
   );
 }

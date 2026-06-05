@@ -1,37 +1,19 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  ArrowLeft,
+  ChevronLeft,
   Check,
   X,
+  Plus,
+  ArrowRight,
+  Printer,
   Package,
   Loader2,
-  Clock,
-  User,
-  MapPin,
-  FolderKanban,
-  Printer,
+  type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Pill, FormDialog, NumberField } from "@/components/safeen/ui";
 import { useAuth } from "@/context/auth-context";
 
 interface RequisitionDetail {
@@ -71,17 +53,54 @@ interface RequisitionDetail {
   }[];
 }
 
-const statusColors: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
-  SUBMITTED: "bg-blue-100 text-blue-700",
-  DEPT_APPROVED: "bg-cyan-100 text-cyan-700",
-  APPROVED: "bg-green-100 text-green-700",
-  PARTIALLY_ISSUED: "bg-amber-100 text-amber-700",
-  ISSUED: "bg-emerald-100 text-emerald-700",
-  REJECTED: "bg-red-100 text-red-700",
-  CANCELLED: "bg-gray-100 text-gray-500",
-  PENDING: "bg-gray-100 text-gray-700",
+type Tone = "green" | "amber" | "red" | "blue" | "violet" | "grey";
+
+const REQ_TONE: Record<string, { tone: Tone; label: string }> = {
+  DRAFT: { tone: "grey", label: "Draft" },
+  SUBMITTED: { tone: "blue", label: "Submitted" },
+  DEPT_APPROVED: { tone: "violet", label: "Dept Approved" },
+  STORE_REVIEWING: { tone: "amber", label: "Store Reviewing" },
+  APPROVED: { tone: "green", label: "Approved" },
+  PARTIALLY_ISSUED: { tone: "amber", label: "Partially Issued" },
+  ISSUED: { tone: "green", label: "Issued" },
+  REJECTED: { tone: "red", label: "Rejected" },
+  CANCELLED: { tone: "grey", label: "Cancelled" },
 };
+
+const LINE_TONE: Record<string, { tone: Tone; label: string }> = {
+  PENDING: { tone: "grey", label: "Pending" },
+  APPROVED: { tone: "blue", label: "Approved" },
+  PARTIALLY_ISSUED: { tone: "amber", label: "Partial" },
+  ISSUED: { tone: "green", label: "Issued" },
+  REJECTED: { tone: "red", label: "Rejected" },
+  BACKORDERED: { tone: "violet", label: "Backordered" },
+};
+
+const ACT: Record<string, { tint: string; Icon: LucideIcon }> = {
+  CREATED: { tint: "tint-grey", Icon: Plus },
+  SUBMITTED: { tint: "tint-blue", Icon: Check },
+  APPROVED: { tint: "tint-green", Icon: Check },
+  ISSUED: { tint: "tint-accent", Icon: ArrowRight },
+  REJECTED: { tint: "tint-red", Icon: X },
+};
+
+function fullDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function relTime(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export default function RequisitionDetailPage({
   params,
@@ -89,18 +108,21 @@ export default function RequisitionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const { user } = useAuth();
   const [requisition, setRequisition] = useState<RequisitionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
 
   const [approveDialog, setApproveDialog] = useState(false);
-  const [approveAction, setApproveAction] = useState<"APPROVED" | "REJECTED">("APPROVED");
+  const [approveAction, setApproveAction] = useState<"APPROVED" | "REJECTED">(
+    "APPROVED"
+  );
   const [approveComments, setApproveComments] = useState("");
 
   const [issueDialog, setIssueDialog] = useState(false);
-  const [issueQuantities, setIssueQuantities] = useState<Record<string, number>>({});
+  const [issueQuantities, setIssueQuantities] = useState<
+    Record<string, number>
+  >({});
 
   function fetchRequisition() {
     setLoading(true);
@@ -181,7 +203,7 @@ export default function RequisitionDetailPage({
         (s, r) => s + r.currentBalance,
         0
       );
-      defaults[item.id] = Math.min(remaining, stock);
+      defaults[item.id] = Math.max(0, Math.min(remaining, stock));
     });
     setIssueQuantities(defaults);
     setIssueDialog(true);
@@ -189,426 +211,385 @@ export default function RequisitionDetailPage({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="size-6 animate-spin text-faint" />
       </div>
     );
   }
 
   if (!requisition) {
-    return <p className="py-20 text-center text-muted-foreground">Not found</p>;
+    return (
+      <div className="empty py-24">
+        <b>Requisition not found</b>
+        <span>It may have been removed or you don&apos;t have access.</span>
+      </div>
+    );
   }
+
+  const st = REQ_TONE[requisition.status] ?? {
+    tone: "grey" as Tone,
+    label: requisition.status.replace(/_/g, " "),
+  };
 
   const canSubmit = requisition.status === "DRAFT";
   const canCancel = ["DRAFT", "SUBMITTED"].includes(requisition.status);
   const canApprove =
     ["SUBMITTED", "DEPT_APPROVED"].includes(requisition.status) &&
-    user &&
-    ["DEPT_HEAD", "STORE_MANAGER", "STORE_STAFF", "SUPER_ADMIN"].includes(user.role);
+    !!user &&
+    ["DEPT_HEAD", "STORE_MANAGER", "STORE_STAFF", "SUPER_ADMIN"].includes(
+      user.role
+    );
   const canIssue =
     ["APPROVED", "PARTIALLY_ISSUED"].includes(requisition.status) &&
-    user &&
+    !!user &&
     ["STORE_MANAGER", "STORE_STAFF", "SUPER_ADMIN"].includes(user.role);
 
+  const issuableItems = requisition.items.filter(
+    (item) => item.quantityIssued < item.quantityRequired
+  );
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/requisitions")}
-            className="rounded-md p-2 hover:bg-accent"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {requisition.requisitionNumber}
-              </h1>
-              <Badge
-                variant="secondary"
-                className={statusColors[requisition.status] || ""}
-              >
-                {requisition.status.replace(/_/g, " ")}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Created {new Date(requisition.createdAt).toLocaleDateString()}
-              {requisition.submittedAt &&
-                ` — Submitted ${new Date(requisition.submittedAt).toLocaleDateString()}`}
-            </p>
+    <div>
+      <Link
+        href="/requisitions"
+        className="btn sm ghost mb-3"
+        style={{ width: "fit-content" }}
+      >
+        <ChevronLeft />
+        All requisitions
+      </Link>
+
+      {/* head */}
+      <div className="rq-head">
+        <div style={{ flex: 1, minWidth: "16rem" }}>
+          <div className="rq-title">
+            <h1>{requisition.requisitionNumber}</h1>
+            <Pill tone={st.tone} dot>
+              {st.label}
+            </Pill>
+            <Pill tone="grey">Rev {requisition.revisionNumber}</Pill>
+          </div>
+          <div className="rq-meta">
+            Created {fullDate(requisition.createdAt)}
+            {requisition.submittedAt &&
+              ` · Submitted ${fullDate(requisition.submittedAt)}`}
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <a
-            href={`/requisitions/${id}/print`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button variant="outline" size="default">
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-          </a>
+        <div className="toolbar">
           {canSubmit && (
-            <Button onClick={handleSubmit} disabled={!!actionLoading}>
-              {actionLoading === "submit" && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <button
+              className="btn primary"
+              onClick={handleSubmit}
+              disabled={!!actionLoading}
+            >
+              {actionLoading === "submit" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Check />
               )}
               Submit
-            </Button>
+            </button>
           )}
           {canApprove && (
             <>
-              <Button
-                variant="outline"
-                className="text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  setApproveAction("REJECTED");
-                  setApproveDialog(true);
-                }}
-              >
-                <X className="mr-2 h-4 w-4" />
-                Reject
-              </Button>
-              <Button
-                className="bg-green-600 hover:bg-green-700"
+              <button
+                className="btn success"
                 onClick={() => {
                   setApproveAction("APPROVED");
                   setApproveDialog(true);
                 }}
               >
-                <Check className="mr-2 h-4 w-4" />
+                <Check />
                 Approve
-              </Button>
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  setApproveAction("REJECTED");
+                  setApproveDialog(true);
+                }}
+              >
+                <X />
+                Reject
+              </button>
             </>
           )}
           {canIssue && (
-            <Button onClick={openIssueDialog}>
-              <Package className="mr-2 h-4 w-4" />
+            <button className="btn accent" onClick={openIssueDialog}>
+              <Package />
               Issue Items
-            </Button>
+            </button>
           )}
           {canCancel && (
-            <Button
-              variant="outline"
+            <button
+              className="btn"
               onClick={handleCancel}
               disabled={!!actionLoading}
             >
               Cancel
-            </Button>
+            </button>
+          )}
+          <a
+            href={`/print/requisition/${id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+          >
+            <Printer />
+            Print
+          </a>
+        </div>
+      </div>
+
+      {/* info cards */}
+      <div className="infocards">
+        <div className="ic-card">
+          <div className="il">Requester</div>
+          <div className="iv">{requisition.requester.name}</div>
+          <div className="is">
+            {requisition.department.name}
+            {requisition.requester.badgeNumber &&
+              ` · ${requisition.requester.badgeNumber}`}
+          </div>
+        </div>
+        <div className="ic-card">
+          <div className="il">Project</div>
+          <div className="iv">
+            {requisition.project
+              ? `${requisition.project.code} — ${requisition.project.name}`
+              : "—"}
+          </div>
+          {requisition.remarks && <div className="is">{requisition.remarks}</div>}
+        </div>
+        <div className="ic-card">
+          <div className="il">Location</div>
+          <div className="iv">{requisition.location?.name ?? "—"}</div>
+          {requisition.location && (
+            <div className="is">
+              {requisition.location.type}
+              {requisition.location.region &&
+                ` · ${requisition.location.region}`}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">{requisition.requester.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {requisition.department.name}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        {requisition.project && (
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <FolderKanban className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">
-                  Project {requisition.project.code}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {requisition.project.name}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {requisition.location && (
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">
-                  {requisition.location.name}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {requisition.location.type}
-                  {requisition.location.region &&
-                    ` — ${requisition.location.region}`}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {requisition.remarks && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                Remarks
-              </p>
-              <p className="text-sm">{requisition.remarks}</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Items Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Requested Items ({requisition.items.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">#</TableHead>
-                <TableHead className="w-[110px]">Item Code</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-[70px]">Unit</TableHead>
-                <TableHead className="w-[80px] text-center">Required</TableHead>
-                <TableHead className="w-[80px] text-center">Issued</TableHead>
-                <TableHead className="w-[80px] text-center">Stock</TableHead>
-                <TableHead className="w-[110px]">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requisition.items.map((item, index) => {
+      {/* items + history */}
+      <div className="grid2">
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Items</h2>
+            <Pill tone="grey" className="ml-2">
+              {requisition.items.length}
+            </Pill>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th style={{ width: "2.5rem" }}>#</th>
+                <th>Item</th>
+                <th>Unit</th>
+                <th className="num">Req</th>
+                <th className="num">Issued</th>
+                <th className="num">Stock</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requisition.items.map((item, i) => {
                 const stock = item.item.inventoryRecords.reduce(
                   (s, r) => s + r.currentBalance,
                   0
                 );
+                const ls = LINE_TONE[item.status] ?? {
+                  tone: "grey" as Tone,
+                  label: item.status.replace(/_/g, " "),
+                };
+                const qcls =
+                  item.quantityIssued >= item.quantityRequired
+                    ? "qty-ok"
+                    : item.quantityIssued > 0
+                      ? "qty-part"
+                      : "qty-zero";
                 return (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground">
-                      {index + 1}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm font-medium">
-                      {item.item.itemCode}
-                    </TableCell>
-                    <TableCell>
-                      <p
-                        className="max-w-sm text-sm"
-                        title={item.item.description}
-                      >
-                        {item.item.description.length > 70
-                          ? item.item.description.substring(0, 70) + "..."
-                          : item.item.description}
-                      </p>
-                      {item.remarks && (
-                        <p className="text-xs text-muted-foreground">
-                          Note: {item.remarks}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">{item.unit}</TableCell>
-                    <TableCell className="text-center text-sm font-medium">
-                      {item.quantityRequired}
-                    </TableCell>
-                    <TableCell className="text-center text-sm">
-                      {item.quantityIssued > 0 ? (
-                        <span
-                          className={
-                            item.quantityIssued >= item.quantityRequired
-                              ? "text-green-600 font-medium"
-                              : "text-amber-600 font-medium"
-                          }
-                        >
-                          {item.quantityIssued}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center text-sm">
-                      <span
-                        className={stock === 0 ? "text-red-600" : "text-muted-foreground"}
-                      >
-                        {stock}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={statusColors[item.status] || ""}
-                      >
-                        {item.status.replace(/_/g, " ")}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
+                  <tr key={item.id} style={{ cursor: "default" }}>
+                    <td className="tnum">{i + 1}</td>
+                    <td>
+                      <div className="strong cellcode">
+                        {item.item.itemCode}
+                      </div>
+                      <div className="sub">
+                        {item.item.description}
+                        {item.remarks && (
+                          <em className="text-brand-ink not-italic">
+                            {" "}
+                            · {item.remarks}
+                          </em>
+                        )}
+                      </div>
+                    </td>
+                    <td>{item.unit}</td>
+                    <td className="num tnum strong">{item.quantityRequired}</td>
+                    <td className={`num tnum font-semibold ${qcls}`}>
+                      {item.quantityIssued > 0 ? item.quantityIssued : "—"}
+                    </td>
+                    <td className={`num tnum ${stock === 0 ? "text-bad" : ""}`}>
+                      {stock}
+                    </td>
+                    <td>
+                      <Pill tone={ls.tone}>{ls.label}</Pill>
+                    </td>
+                  </tr>
                 );
               })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
 
-      {/* Approval History */}
-      {requisition.approvals.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Approval History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {requisition.approvals.map((approval) => (
-                <div
-                  key={approval.id}
-                  className="flex items-start gap-3 rounded-md border p-3"
-                >
-                  <div
-                    className={`mt-0.5 rounded-full p-1 ${
-                      approval.action === "APPROVED"
-                        ? "bg-green-100 text-green-600"
-                        : "bg-red-100 text-red-600"
-                    }`}
-                  >
-                    {approval.action === "APPROVED" ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <X className="h-3 w-3" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">
-                        {approval.approver.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Level {approval.level} — {approval.approver.role}
-                      </span>
-                    </div>
-                    {approval.comments && (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {approval.comments}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    {new Date(approval.actedAt).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Approve/Reject Dialog */}
-      <Dialog open={approveDialog} onOpenChange={setApproveDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {approveAction === "APPROVED"
-                ? "Approve Requisition"
-                : "Reject Requisition"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="Add comments (optional)..."
-              value={approveComments}
-              onChange={(e) => setApproveComments(e.target.value)}
-            />
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setApproveDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleApprove}
-                disabled={!!actionLoading}
-                className={
-                  approveAction === "REJECTED"
-                    ? "bg-red-600 hover:bg-red-700"
-                    : "bg-green-600 hover:bg-green-700"
-                }
-              >
-                {actionLoading === "approve" && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {approveAction === "APPROVED" ? "Approve" : "Reject"}
-              </Button>
-            </div>
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Approval history</h2>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Issue Dialog */}
-      <Dialog open={issueDialog} onOpenChange={setIssueDialog}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Issue Items</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Enter the quantity to issue for each item. Pre-filled with the
-              maximum issuable amount based on stock.
-            </p>
-            <div className="space-y-2">
-              {requisition.items
-                .filter((item) => item.quantityIssued < item.quantityRequired)
-                .map((item) => {
-                  const remaining =
-                    item.quantityRequired - item.quantityIssued;
-                  const stock = item.item.inventoryRecords.reduce(
-                    (s, r) => s + r.currentBalance,
-                    0
-                  );
+          <div className="panel-body">
+            {requisition.approvals.length === 0 ? (
+              <p className="text-[0.85rem] text-subtle">
+                No approval activity yet.
+              </p>
+            ) : (
+              <div className="timeline">
+                {requisition.approvals.map((h) => {
+                  const meta = ACT[h.action] ?? ACT.CREATED;
+                  const Icon = meta.Icon;
                   return (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 rounded-md border p-3"
-                    >
-                      <div className="flex-1">
-                        <span className="text-sm font-medium">
-                          {item.item.itemCode}
-                        </span>
-                        <p className="text-xs text-muted-foreground">
-                          Need: {remaining} {item.unit} — Stock: {stock}
-                        </p>
+                    <div key={h.id} className="tl-item">
+                      <span className={`tl-dot ${meta.tint}`}>
+                        <Icon strokeWidth={2.2} />
+                      </span>
+                      <div className="tl-body">
+                        <b>
+                          {h.action.charAt(0) +
+                            h.action.slice(1).toLowerCase()}{" "}
+                          · {h.approver.name}
+                        </b>
+                        <div className="meta">
+                          {h.approver.role.replace(/_/g, " ")}
+                          {h.level ? ` · Level ${h.level}` : ""}
+                        </div>
+                        {h.comments && <div className="cmt">{h.comments}</div>}
                       </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        max={Math.min(remaining, stock)}
-                        value={issueQuantities[item.id] || 0}
-                        onChange={(e) =>
-                          setIssueQuantities((prev) => ({
-                            ...prev,
-                            [item.id]: parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="w-20 text-center"
-                      />
+                      <span className="tl-time">{relTime(h.actedAt)}</span>
                     </div>
                   );
                 })}
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIssueDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleIssue} disabled={!!actionLoading}>
-                {actionLoading === "issue" && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Issue Items
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </div>
+
+      {/* approve / reject dialog */}
+      <FormDialog
+        open={approveDialog}
+        onOpenChange={setApproveDialog}
+        size="md"
+        title={
+          approveAction === "APPROVED"
+            ? "Approve requisition"
+            : "Reject requisition"
+        }
+        description={
+          approveAction === "APPROVED"
+            ? "This advances the requisition to the next stage."
+            : "This returns the requisition as rejected."
+        }
+      >
+        <div className="field">
+          <label>
+            Comments <span className="hint">(optional)</span>
+          </label>
+          <textarea
+            className="inp"
+            placeholder="Add a note for the approval history…"
+            value={approveComments}
+            onChange={(e) => setApproveComments(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-1">
+          <button className="btn" onClick={() => setApproveDialog(false)}>
+            Cancel
+          </button>
+          <button
+            className={`btn ${approveAction === "APPROVED" ? "success" : "danger"}`}
+            onClick={handleApprove}
+            disabled={!!actionLoading}
+          >
+            {actionLoading === "approve" && (
+              <Loader2 className="size-4 animate-spin" />
+            )}
+            {approveAction === "APPROVED" ? "Approve" : "Reject"}
+          </button>
+        </div>
+      </FormDialog>
+
+      {/* issue dialog */}
+      <FormDialog
+        open={issueDialog}
+        onOpenChange={setIssueDialog}
+        size="xl"
+        title="Issue items"
+        description="Quantities are capped at the lower of remaining need and available stock."
+      >
+        <div>
+          {issuableItems.map((item) => {
+            const remaining = item.quantityRequired - item.quantityIssued;
+            const stock = item.item.inventoryRecords.reduce(
+              (s, r) => s + r.currentBalance,
+              0
+            );
+            const max = Math.max(0, Math.min(remaining, stock));
+            return (
+              <div key={item.id} className="issue-line">
+                <div>
+                  <div className="strong cellcode">{item.item.itemCode}</div>
+                  <div className="sub">{item.item.description}</div>
+                  <div className="sub">
+                    Need {remaining} · stock {stock} · max {max}
+                  </div>
+                </div>
+                <div className="qin">
+                  <NumberField
+                    integer
+                    min={0}
+                    value={issueQuantities[item.id] ?? 0}
+                    onValueChange={(n) =>
+                      setIssueQuantities((prev) => ({
+                        ...prev,
+                        [item.id]: Math.min(Math.max(0, n), max),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-end gap-3 pt-1">
+          <button className="btn" onClick={() => setIssueDialog(false)}>
+            Cancel
+          </button>
+          <button
+            className="btn accent"
+            onClick={handleIssue}
+            disabled={!!actionLoading}
+          >
+            {actionLoading === "issue" && (
+              <Loader2 className="size-4 animate-spin" />
+            )}
+            Issue items
+          </button>
+        </div>
+      </FormDialog>
     </div>
   );
 }

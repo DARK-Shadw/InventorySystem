@@ -99,6 +99,48 @@ export async function PATCH(
     },
   });
 
+  // Optional manual stock-balance set/adjust.
+  if (body.stockBalance !== undefined && body.stockBalance !== null) {
+    const bal = Math.max(0, Math.trunc(Number(body.stockBalance) || 0));
+    const rec = await prisma.inventory.findFirst({ where: { itemId: id } });
+    if (rec) {
+      await prisma.inventory.update({
+        where: { id: rec.id },
+        data: { currentBalance: bal, availableBalance: bal },
+      });
+    } else if (bal > 0) {
+      let storeroom =
+        (await prisma.storeroom.findUnique({ where: { code: "SSMAIN" } })) ??
+        (await prisma.storeroom.findFirst());
+      if (!storeroom) {
+        storeroom = await prisma.storeroom.create({
+          data: {
+            code: "SSMAIN",
+            name: "Main Store - Safeen Survey & Subsea",
+            site: "SS",
+          },
+        });
+      }
+      await prisma.inventory.create({
+        data: {
+          itemId: id,
+          storeroomId: storeroom.id,
+          currentBalance: bal,
+          availableBalance: bal,
+        },
+      });
+    }
+
+    const fresh = await prisma.item.findUnique({
+      where: { id },
+      include: {
+        commodityGroup: true,
+        inventoryRecords: { include: { storeroom: true } },
+      },
+    });
+    return NextResponse.json(fresh ?? item);
+  }
+
   return NextResponse.json(item);
 }
 

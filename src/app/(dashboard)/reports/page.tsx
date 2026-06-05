@@ -5,56 +5,56 @@ import {
   BarChart3,
   Download,
   Loader2,
-  Package,
-  TrendingDown,
+  Boxes,
+  TriangleAlert,
   FileText,
-  Building2,
+  BarChart2,
+  ChevronLeft,
+  ChevronRight,
+  type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { PageHead, Pill } from "@/components/safeen/ui";
 
-const REPORTS = [
+type Tone = "green" | "amber" | "red" | "blue" | "violet" | "grey";
+
+const REPORTS: {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  tint: string;
+  hasDateFilter: boolean;
+}[] = [
   {
     id: "inventory-summary",
     title: "Inventory Summary",
-    description: "Complete stock overview with values and status",
-    icon: Package,
-    color: "text-blue-600 bg-blue-50",
+    description: "Stock levels & value by item",
+    icon: Boxes,
+    tint: "tint-accent",
     hasDateFilter: false,
   },
   {
     id: "low-stock",
-    title: "Low Stock / Reorder Report",
-    description: "Items at or below reorder point with suggested order quantities",
-    icon: TrendingDown,
-    color: "text-amber-600 bg-amber-50",
+    title: "Low Stock / Reorder",
+    description: "Items at or below reorder point",
+    icon: TriangleAlert,
+    tint: "tint-amber",
     hasDateFilter: false,
   },
   {
     id: "consumption-by-department",
-    title: "Consumption by Department",
-    description: "Items issued per department with total quantities and values",
-    icon: Building2,
-    color: "text-purple-600 bg-purple-50",
+    title: "Consumption by Dept",
+    description: "Issued value per department",
+    icon: BarChart2,
+    tint: "tint-blue",
     hasDateFilter: true,
   },
   {
     id: "requisition-history",
     title: "Requisition History",
-    description: "All requisitions with status breakdown",
+    description: "All requisitions in range",
     icon: FileText,
-    color: "text-green-600 bg-green-50",
+    tint: "tint-violet",
     hasDateFilter: true,
   },
 ];
@@ -65,12 +65,43 @@ interface ReportData {
   data: Record<string, unknown>[];
 }
 
+const STATUS_TONE: Record<string, Tone> = {
+  OUT_OF_STOCK: "red",
+  REJECTED: "red",
+  LOW_STOCK: "amber",
+  PARTIALLY_ISSUED: "amber",
+  IN_STOCK: "green",
+  ISSUED: "green",
+  APPROVED: "green",
+};
+
+function titleCase(key: string) {
+  return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+}
+
+function isNumericCol(key: string) {
+  const k = key.toLowerCase();
+  return (
+    k.includes("value") ||
+    k.includes("cost") ||
+    k.includes("balance") ||
+    k.includes("qty") ||
+    k.includes("quantity") ||
+    k.includes("rop") ||
+    k.includes("count") ||
+    k.includes("items") ||
+    k.includes("share")
+  );
+}
+
 export default function ReportsPage() {
-  const [selectedReport, setSelectedReport] = useState("");
+  const [selectedReport, setSelectedReport] = useState("inventory-summary");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ReportData | null>(null);
+  const [page, setPage] = useState(1);
+  const PER = 50;
 
   const selectedConfig = REPORTS.find((r) => r.id === selectedReport);
 
@@ -78,6 +109,7 @@ export default function ReportsPage() {
     if (!selectedReport) return;
     setLoading(true);
     setReport(null);
+    setPage(1);
 
     const params = new URLSearchParams({ type: selectedReport });
     if (fromDate) params.set("from", fromDate);
@@ -96,11 +128,13 @@ export default function ReportsPage() {
     if (!report || !report.data.length) return;
     const headers = Object.keys(report.data[0]);
     const rows = report.data.map((row) =>
-      headers.map((h) => {
-        const val = row[h];
-        const str = String(val ?? "");
-        return str.includes(",") ? `"${str}"` : str;
-      }).join(",")
+      headers
+        .map((h) => {
+          const val = row[h];
+          const str = String(val ?? "");
+          return str.includes(",") ? `"${str}"` : str;
+        })
+        .join(",")
     );
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -113,188 +147,235 @@ export default function ReportsPage() {
   }
 
   function truncate(str: string, len: number) {
-    return str.length <= len ? str : str.substring(0, len) + "...";
+    return str.length <= len ? str : str.substring(0, len) + "…";
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Generate inventory and requisition reports
-        </p>
-      </div>
+  function fmtMoney(v: number) {
+    return `AED ${v.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
 
-      {/* Report Selection */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+  const cols = report?.data.length ? Object.keys(report.data[0]) : [];
+
+  return (
+    <div>
+      <PageHead
+        eyebrow="Analytics"
+        title="Reports"
+        sub="Generate inventory and requisition reports and export to CSV."
+      />
+
+      {/* report type cards */}
+      <div className="rtypes">
         {REPORTS.map((r) => (
           <button
             key={r.id}
-            onClick={() => { setSelectedReport(r.id); setReport(null); }}
-            className={`rounded-lg border p-4 text-left transition-colors ${
-              selectedReport === r.id
-                ? "border-primary bg-primary/5"
-                : "hover:border-muted-foreground/30"
-            }`}
+            className={`rtype${selectedReport === r.id ? " on" : ""}`}
+            onClick={() => {
+              setSelectedReport(r.id);
+              setReport(null);
+            }}
           >
-            <div className={`mb-2 inline-flex rounded-lg p-2 ${r.color}`}>
-              <r.icon className="h-4 w-4" />
-            </div>
-            <p className="text-sm font-medium">{r.title}</p>
-            <p className="text-xs text-muted-foreground">{r.description}</p>
+            <span className={`ic ${r.tint}`}>
+              <r.icon strokeWidth={1.9} />
+            </span>
+            <b>{r.title}</b>
+            <span>{r.description}</span>
           </button>
         ))}
       </div>
 
-      {/* Filters + Generate */}
-      {selectedReport && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-end gap-4">
-              {selectedConfig?.hasDateFilter && (
-                <>
-                  <div className="space-y-2">
-                    <Label>From</Label>
-                    <Input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>To</Label>
-                    <Input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
-              <Button onClick={generateReport} disabled={loading}>
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                )}
-                Generate
-              </Button>
-              {report && report.data.length > 0 && (
-                <Button variant="outline" onClick={exportCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export CSV
-                </Button>
-              )}
+      {/* controls */}
+      <div className="controls">
+        {selectedConfig?.hasDateFilter && (
+          <>
+            <div className="field">
+              <label>From</label>
+              <input
+                className="inp"
+                type="date"
+                style={{ width: "12rem" }}
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div className="field">
+              <label>To</label>
+              <input
+                className="inp"
+                type="date"
+                style={{ width: "12rem" }}
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        <button className="btn primary" onClick={generateReport} disabled={loading}>
+          {loading ? (
+            <Loader2 className="animate-spin" />
+          ) : (
+            <BarChart3 />
+          )}
+          Generate
+        </button>
+        <span className="grow" style={{ flex: 1 }} />
+        {report && report.data.length > 0 && (
+          <button className="btn" onClick={exportCSV}>
+            <Download />
+            Export CSV
+          </button>
+        )}
+      </div>
+
+      {/* summary stat cards */}
+      {report?.summary && (
+        <div className="statcards">
+          {Object.entries(report.summary)
+            .filter(([, value]) => typeof value !== "object")
+            .map(([key, value]) => (
+              <div key={key} className="mini">
+                <div className="ml">{titleCase(key)}</div>
+                <div className="mv" style={{ fontSize: "1.5rem" }}>
+                  {typeof value === "number" &&
+                  key.toLowerCase().includes("value")
+                    ? fmtMoney(value)
+                    : String(value)}
+                </div>
+              </div>
+            ))}
+        </div>
       )}
 
-      {/* Report Results */}
-      {report && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {selectedConfig?.title} — {report.data.length} records
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {/* Summary Cards */}
-            {report.summary && (
-              <div className="grid gap-3 border-b p-4 sm:grid-cols-4">
-                {Object.entries(report.summary).map(([key, value]) => {
-                  if (typeof value === "object") return null;
-                  return (
-                    <div key={key} className="rounded-lg bg-muted/50 p-3 text-center">
-                      <p className="text-2xl font-bold">
-                        {typeof value === "number" && key.toLowerCase().includes("value")
-                          ? `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : String(value)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {report.data.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                No data for the selected criteria
-              </p>
+      {/* results table */}
+      <div className="tablewrap">
+        <table className="tbl">
+          {report && cols.length > 0 && (
+            <thead>
+              <tr>
+                {cols.map((key) => (
+                  <th key={key} className={isNumericCol(key) ? "num" : ""}>
+                    {titleCase(key)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={Math.max(cols.length, 1)}>
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="size-6 animate-spin text-faint" />
+                  </div>
+                </td>
+              </tr>
+            ) : !report ? (
+              <tr>
+                <td>
+                  <div className="empty">
+                    <b>Pick a report</b>
+                    <span>
+                      Choose a report type above, then press Generate.
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : report.data.length === 0 ? (
+              <tr>
+                <td colSpan={Math.max(cols.length, 1)}>
+                  <div className="empty">
+                    <b>No data</b>
+                    <span>No records for the selected criteria.</span>
+                  </div>
+                </td>
+              </tr>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {Object.keys(report.data[0]).map((key) => (
-                        <TableHead key={key} className="whitespace-nowrap text-xs">
-                          {key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {report.data.slice(0, 100).map((row, i) => (
-                      <TableRow key={i}>
-                        {Object.entries(row).map(([key, value], j) => (
-                          <TableCell key={j} className="whitespace-nowrap text-xs">
-                            {key === "status" ? (
-                              <Badge
-                                variant="secondary"
-                                className={
-                                  value === "OUT_OF_STOCK" || value === "REJECTED"
-                                    ? "bg-red-100 text-red-700"
-                                    : value === "LOW_STOCK" || value === "PARTIALLY_ISSUED"
-                                      ? "bg-amber-100 text-amber-700"
-                                      : value === "IN_STOCK" || value === "ISSUED" || value === "APPROVED"
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-gray-100 text-gray-700"
-                                }
-                              >
-                                {String(value).replace(/_/g, " ")}
-                              </Badge>
-                            ) : key === "criticality" ? (
-                              <Badge
-                                variant="secondary"
-                                className={
-                                  value === 1
-                                    ? "bg-red-100 text-red-700"
-                                    : value === 2
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-gray-100 text-gray-700"
-                                }
-                              >
-                                {value === 1 ? "Critical" : value === 2 ? "Important" : "Standard"}
-                              </Badge>
-                            ) : typeof value === "number" ? (
-                              key.toLowerCase().includes("value") || key.toLowerCase().includes("cost")
-                                ? `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : value.toLocaleString()
-                            ) : typeof value === "string" && key === "date" ? (
-                              new Date(value).toLocaleDateString()
-                            ) : typeof value === "string" && key === "description" ? (
-                              <span title={value}>{truncate(value, 50)}</span>
-                            ) : (
-                              String(value ?? "—")
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {report.data.length > 100 && (
-                  <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-                    Showing first 100 of {report.data.length} records. Export CSV for the full dataset.
-                  </p>
-                )}
-              </div>
+              report.data
+                .slice((page - 1) * PER, page * PER)
+                .map((row, i) => (
+                <tr key={i} style={{ cursor: "default" }}>
+                  {Object.entries(row).map(([key, value], j) => {
+                    const numeric = isNumericCol(key) && typeof value === "number";
+                    return (
+                      <td key={j} className={numeric ? "num tnum" : ""}>
+                        {key === "status" ? (
+                          <Pill tone={STATUS_TONE[String(value)] ?? "grey"}>
+                            {String(value).replace(/_/g, " ")}
+                          </Pill>
+                        ) : key === "criticality" ? (
+                          <Pill
+                            tone={
+                              value === 1
+                                ? "red"
+                                : value === 2
+                                  ? "amber"
+                                  : "grey"
+                            }
+                          >
+                            {value === 1
+                              ? "Critical"
+                              : value === 2
+                                ? "Important"
+                                : "Standard"}
+                          </Pill>
+                        ) : typeof value === "number" ? (
+                          key.toLowerCase().includes("value") ||
+                          key.toLowerCase().includes("cost") ? (
+                            fmtMoney(value)
+                          ) : (
+                            value.toLocaleString()
+                          )
+                        ) : key === "code" || key === "number" ? (
+                          <span className="cellcode">{String(value)}</span>
+                        ) : typeof value === "string" && key === "date" ? (
+                          new Date(value).toLocaleDateString()
+                        ) : typeof value === "string" && key === "description" ? (
+                          <span title={value}>{truncate(value, 50)}</span>
+                        ) : (
+                          String(value ?? "—")
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
             )}
-          </CardContent>
-        </Card>
+          </tbody>
+        </table>
+      </div>
+      {report && report.data.length > PER && (
+        <div className="pagination">
+          <span className="info">
+            Showing {(page - 1) * PER + 1}–
+            {Math.min(page * PER, report.data.length)} of {report.data.length}{" "}
+            records
+          </span>
+          <div className="pgbtns">
+            <button
+              className="btn sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft />
+              Prev
+            </button>
+            <button
+              className="btn sm"
+              disabled={page >= Math.ceil(report.data.length / PER)}
+              onClick={() =>
+                setPage((p) =>
+                  Math.min(Math.ceil(report.data.length / PER), p + 1)
+                )
+              }
+            >
+              Next
+              <ChevronRight />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

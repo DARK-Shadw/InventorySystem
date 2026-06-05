@@ -2,19 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Plus,
-  Trash2,
   Search,
   Loader2,
-  ArrowLeft,
-  Package,
+  ChevronLeft,
+  Check,
+  Save,
+  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { PageHead, Pill, SelectControl, NumberField } from "@/components/safeen/ui";
 
 interface SearchResult {
   id: string;
@@ -93,7 +91,11 @@ export default function NewRequisitionPage() {
   }, [itemSearch]);
 
   function addItem(item: SearchResult) {
-    if (lineItems.some((li) => li.itemId === item.id)) return;
+    if (lineItems.some((li) => li.itemId === item.id)) {
+      setItemSearch("");
+      setShowSearch(false);
+      return;
+    }
     setLineItems((prev) => [
       ...prev,
       {
@@ -115,14 +117,16 @@ export default function NewRequisitionPage() {
     setLineItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateItem(index: number, field: keyof LineItem, value: string | number) {
+  function updateQty(index: number, value: number) {
     setLineItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      prev.map((item, i) =>
+        i === index ? { ...item, quantityRequired: Math.max(1, value) } : item
+      )
     );
   }
 
   function truncate(str: string, len: number) {
-    return str.length <= len ? str : str.substring(0, len) + "...";
+    return str.length <= len ? str : str.substring(0, len) + "…";
   }
 
   async function handleSubmit(asDraft: boolean) {
@@ -131,10 +135,8 @@ export default function NewRequisitionPage() {
       setError("Add at least one item to the requisition");
       return;
     }
-
-    const invalidItems = lineItems.filter((li) => li.quantityRequired <= 0);
-    if (invalidItems.length > 0) {
-      setError("All items must have a quantity greater than 0");
+    if (lineItems.some((li) => li.quantityRequired <= 0)) {
+      setError("Every quantity must be greater than 0");
       return;
     }
 
@@ -179,246 +181,247 @@ export default function NewRequisitionPage() {
     }
   }
 
+  const totalQty = lineItems.reduce(
+    (s, l) => s + (Number(l.quantityRequired) || 0),
+    0
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => router.back()}
-          className="rounded-md p-2 hover:bg-accent"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            New Requisition
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Request items from the main store
-          </p>
-        </div>
-      </div>
+    <div>
+      <Link
+        href="/requisitions"
+        className="btn sm ghost mb-3"
+        style={{ width: "fit-content" }}
+      >
+        <ChevronLeft />
+        All requisitions
+      </Link>
+
+      <PageHead
+        eyebrow="Material request"
+        title="New requisition"
+        sub="Build a requisition, add line items and submit for approval."
+      />
 
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+        <div className="mb-4 rounded-[0.65rem] bg-bad-bg px-3 py-2.5 text-[0.82rem] text-bad">
           {error}
         </div>
       )}
 
-      {/* Header Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Requisition Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Project</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-              >
-                <option value="">Select project (optional)</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} — {p.name}
-                  </option>
-                ))}
-              </select>
+      <div className="grid2">
+        {/* left column */}
+        <div className="flex flex-col gap-[1.1rem]">
+          {/* header panel */}
+          <div className="panel">
+            <div className="panel-head">
+              <h2>Header</h2>
             </div>
-            <div className="space-y-2">
-              <Label>Location / Vessel</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-              >
-                <option value="">Select location (optional)</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({l.type})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label>Remarks</Label>
-              <Input
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Optional notes..."
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Item Search + Add */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Items</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search items by code, description, part number..."
-              className="pl-9"
-              value={itemSearch}
-              onChange={(e) => setItemSearch(e.target.value)}
-              onFocus={() => searchResults.length > 0 && setShowSearch(true)}
-              onBlur={() => setTimeout(() => setShowSearch(false), 200)}
-            />
-            {searching && (
-              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            )}
-
-            {showSearch && searchResults.length > 0 && (
-              <div className="absolute top-full z-10 mt-1 w-full rounded-md border bg-background shadow-lg">
-                {searchResults.map((item) => {
-                  const alreadyAdded = lineItems.some(
-                    (li) => li.itemId === item.id
-                  );
-                  return (
-                    <button
-                      key={item.id}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-50"
-                      onClick={() => addItem(item)}
-                      disabled={alreadyAdded}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-medium">
-                            {item.itemCode}
-                          </span>
-                          {item.classDescription && (
-                            <span className="text-xs text-muted-foreground">
-                              {item.classDescription}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {truncate(item.description, 80)}
-                        </p>
-                      </div>
-                      <div className="ml-3 text-right">
-                        <p className="text-xs font-medium">
-                          Stock: {item.availableStock}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.issueUnit}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Line Items */}
-          {lineItems.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-muted-foreground">
-              <Package className="mb-2 h-8 w-8" />
-              <p className="text-sm">Search and add items above</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {/* Header */}
-              <div className="grid grid-cols-[1fr_80px_80px_80px_120px_40px] gap-2 px-2 text-xs font-semibold text-muted-foreground">
-                <span>Item</span>
-                <span className="text-center">Stock</span>
-                <span className="text-center">Qty</span>
-                <span>Unit</span>
-                <span>Remarks</span>
-                <span />
-              </div>
-
-              {lineItems.map((item, index) => (
-                <div
-                  key={item.itemId}
-                  className="grid grid-cols-[1fr_80px_80px_80px_120px_40px] items-center gap-2 rounded-md border p-2"
-                >
-                  <div>
-                    <span className="text-sm font-medium">{item.itemCode}</span>
-                    <p className="text-xs text-muted-foreground">
-                      {truncate(item.description, 60)}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <Badge
-                      variant="secondary"
-                      className={
-                        item.availableStock === 0
-                          ? "bg-red-100 text-red-700"
-                          : "bg-green-100 text-green-700"
-                      }
-                    >
-                      {item.availableStock}
-                    </Badge>
-                  </div>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={item.quantityRequired}
-                    onChange={(e) =>
-                      updateItem(
-                        index,
-                        "quantityRequired",
-                        parseInt(e.target.value) || 0
-                      )
-                    }
-                    className="h-8 text-center text-sm"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {item.unit}
-                  </span>
-                  <Input
-                    value={item.remarks}
-                    onChange={(e) =>
-                      updateItem(index, "remarks", e.target.value)
-                    }
-                    className="h-8 text-sm"
-                    placeholder="Note..."
-                  />
-                  <button
-                    onClick={() => removeItem(index)}
-                    className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+            <div className="panel-body">
+              <div className="formgrid">
+                <div className="field">
+                  <label>Project</label>
+                  <SelectControl
+                    variant="inp"
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    <option value="">— None —</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} — {p.name}
+                      </option>
+                    ))}
+                  </SelectControl>
                 </div>
-              ))}
+                <div className="field">
+                  <label>Location / vessel</label>
+                  <SelectControl
+                    variant="inp"
+                    value={locationId}
+                    onChange={(e) => setLocationId(e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.type})
+                      </option>
+                    ))}
+                  </SelectControl>
+                </div>
+                <div className="field span2">
+                  <label>Remarks</label>
+                  <textarea
+                    className="inp"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Add context for the store team…"
+                  />
+                </div>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      {/* Actions */}
-      <div className="flex justify-end gap-3">
-        <Button
-          variant="outline"
-          onClick={() => router.back()}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => handleSubmit(true)}
-          disabled={saving || lineItems.length === 0}
-        >
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save as Draft
-        </Button>
-        <Button
-          onClick={() => handleSubmit(false)}
-          disabled={saving || lineItems.length === 0}
-        >
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Submit Requisition
-        </Button>
+          {/* items panel */}
+          <div className="panel overflow-visible">
+            <div className="panel-head">
+              <h2>Items</h2>
+              <Pill tone="grey" className="ml-2">
+                {lineItems.length}
+              </Pill>
+            </div>
+            <div className="panel-body">
+              <div className="ta mb-[0.6rem]">
+                <label className="control" style={{ width: "100%" }}>
+                  <Search aria-hidden style={{ color: "var(--color-faint)" }} />
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Search items to add (min 2 characters)…"
+                    style={{
+                      border: "none",
+                      outline: "none",
+                      background: "transparent",
+                      width: "100%",
+                      fontSize: "0.88rem",
+                    }}
+                    value={itemSearch}
+                    onChange={(e) => setItemSearch(e.target.value)}
+                    onFocus={() =>
+                      searchResults.length > 0 && setShowSearch(true)
+                    }
+                    onBlur={() => setTimeout(() => setShowSearch(false), 200)}
+                  />
+                  {searching && (
+                    <Loader2 className="size-4 animate-spin text-faint" />
+                  )}
+                </label>
+                <div className={`ta-drop${showSearch ? " open" : ""}`}>
+                  {searchResults.length === 0 ? (
+                    <div
+                      className="ta-opt"
+                      style={{ cursor: "default", color: "var(--color-subtle)" }}
+                    >
+                      No matching items
+                    </div>
+                  ) : (
+                    searchResults.map((item) => {
+                      const added = lineItems.some(
+                        (li) => li.itemId === item.id
+                      );
+                      return (
+                        <div
+                          key={item.id}
+                          className="ta-opt"
+                          style={added ? { opacity: 0.5 } : undefined}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            if (!added) addItem(item);
+                          }}
+                        >
+                          <div>
+                            <div className="strong cellcode">
+                              {item.itemCode}
+                            </div>
+                            <div className="sub">
+                              {truncate(item.description, 64)}
+                            </div>
+                          </div>
+                          <div className="meta">
+                            <Pill
+                              tone={item.availableStock === 0 ? "red" : "green"}
+                            >
+                              {item.availableStock} {item.issueUnit}
+                            </Pill>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div>
+                {lineItems.length === 0 ? (
+                  <div className="empty" style={{ padding: "2rem 1rem" }}>
+                    <div className="ei">
+                      <Plus />
+                    </div>
+                    <b>No items yet</b>
+                    <span>Search above to add line items.</span>
+                  </div>
+                ) : (
+                  lineItems.map((item, index) => (
+                    <div key={item.itemId} className="lineitem">
+                      <div>
+                        <div className="strong cellcode">{item.itemCode}</div>
+                        <div className="sub">
+                          {truncate(item.description, 60)}
+                        </div>
+                      </div>
+                      <NumberField
+                        integer
+                        min={1}
+                        value={item.quantityRequired}
+                        onValueChange={(n) => updateQty(index, n)}
+                      />
+                      <Pill
+                        tone={item.availableStock === 0 ? "red" : "green"}
+                        className="justify-self-center"
+                      >
+                        {item.availableStock} {item.unit}
+                      </Pill>
+                      <button
+                        type="button"
+                        className="rm"
+                        title="Remove"
+                        onClick={() => removeItem(index)}
+                      >
+                        <X />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* right column — summary */}
+        <div className="sticky-side">
+          <div className="panel">
+            <div className="panel-head">
+              <h2>Summary</h2>
+            </div>
+            <div className="panel-body">
+              <div className="mb-2 flex justify-between text-[0.86rem] text-subtle">
+                <span>Line items</span>
+                <b className="text-ink">{lineItems.length}</b>
+              </div>
+              <div className="flex justify-between text-[0.86rem] text-subtle">
+                <span>Total quantity</span>
+                <b className="text-ink tnum">{totalQty.toLocaleString()}</b>
+              </div>
+              <div className="my-4 h-px bg-line-soft" />
+              <button
+                className="btn primary mb-[0.55rem] w-full"
+                onClick={() => handleSubmit(false)}
+                disabled={saving || lineItems.length === 0}
+              >
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check />}
+                Submit Requisition
+              </button>
+              <button
+                className="btn w-full"
+                onClick={() => handleSubmit(true)}
+                disabled={saving || lineItems.length === 0}
+              >
+                <Save />
+                Save as Draft
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

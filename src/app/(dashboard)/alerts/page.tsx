@@ -1,28 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Bell,
-  Plus,
-  Trash2,
-  Loader2,
-  AlertTriangle,
-  PackageX,
-  RefreshCw,
-  Check,
-  Search,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Plus, Trash2, Loader2, RefreshCw, Search } from "lucide-react";
+import { PageHead, Pill, FormDialog, SelectControl } from "@/components/safeen/ui";
 
 interface AlertRule {
   id: string;
@@ -51,10 +31,12 @@ interface SearchItem {
   availableStock: number;
 }
 
-const alertTypeLabels: Record<string, { label: string; icon: typeof Bell; color: string }> = {
-  LOW_STOCK: { label: "Low Stock", icon: AlertTriangle, color: "bg-amber-100 text-amber-700" },
-  OUT_OF_STOCK: { label: "Out of Stock", icon: PackageX, color: "bg-red-100 text-red-700" },
-  REORDER_POINT: { label: "Reorder Point", icon: RefreshCw, color: "bg-blue-100 text-blue-700" },
+type Tone = "green" | "amber" | "red" | "blue" | "violet" | "grey";
+
+const alertTypeLabels: Record<string, { label: string; tone: Tone }> = {
+  LOW_STOCK: { label: "Low Stock", tone: "blue" },
+  OUT_OF_STOCK: { label: "Out of Stock", tone: "red" },
+  REORDER_POINT: { label: "Reorder Point", tone: "amber" },
 };
 
 export default function AlertsPage() {
@@ -183,238 +165,237 @@ export default function AlertsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="size-6 animate-spin text-faint" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage stock alert rules and notifications
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleCheckAlerts} disabled={checking}>
-            {checking ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Check Now
-          </Button>
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Rule
-          </Button>
-        </div>
-      </div>
+    <div>
+      <PageHead
+        eyebrow="Stock monitoring"
+        title="Alerts"
+        sub="Configure alert rules and review stock notifications."
+      >
+        <button
+          className="btn"
+          onClick={handleCheckAlerts}
+          disabled={checking}
+        >
+          {checking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw />}
+          Check Now
+        </button>
+        <button className="btn primary" onClick={() => setAddOpen(true)}>
+          <Plus />
+          Add Rule
+        </button>
+      </PageHead>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="alerts-grid">
         {/* Alert Rules */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Alert Rules ({rules.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {rules.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-muted-foreground">
-                <Bell className="mb-2 h-8 w-8" />
-                <p className="text-sm">No alert rules configured</p>
-                <p className="text-xs">
-                  Add a rule to get notified about low stock
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {rules.map((rule) => {
-                  const type = alertTypeLabels[rule.alertType] || alertTypeLabels.LOW_STOCK;
-                  const Icon = type.icon;
-                  return (
-                    <div
-                      key={rule.id}
-                      className="flex items-center justify-between rounded-lg border p-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`rounded-md p-1.5 ${type.color}`}>
-                          <Icon className="h-3.5 w-3.5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className={type.color}>
-                              {type.label}
-                            </Badge>
-                            {rule.threshold && (
-                              <span className="text-xs text-muted-foreground">
-                                Threshold: {rule.threshold}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {rule.item
-                              ? `${rule.item.itemCode} — ${rule.item.description.substring(0, 50)}...`
-                              : "All items (global rule)"}
-                          </p>
-                        </div>
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Alert rules</h2>
+            <Pill tone="grey" className="ml-2">
+              {rules.length}
+            </Pill>
+          </div>
+          {rules.length === 0 ? (
+            <div className="empty" style={{ padding: "2.5rem 1rem" }}>
+              <b>No rules</b>
+              <span>Add a rule to start monitoring stock.</span>
+            </div>
+          ) : (
+            <div>
+              {rules.map((rule) => {
+                const type =
+                  alertTypeLabels[rule.alertType] || alertTypeLabels.LOW_STOCK;
+                return (
+                  <div key={rule.id} className="rule">
+                    <Pill tone={type.tone}>{type.label}</Pill>
+                    <div>
+                      <div className="text-[0.86rem] font-medium">
+                        {rule.item
+                          ? `${rule.item.itemCode} — ${rule.item.description.length > 44 ? rule.item.description.substring(0, 44) + "…" : rule.item.description}`
+                          : "All items"}
                       </div>
-                      <button
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="text-[0.78rem] text-subtle">
+                        {rule.threshold != null
+                          ? `Threshold: ${rule.threshold}`
+                          : "Uses item reorder point"}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    <button
+                      className="rm"
+                      title="Delete rule"
+                      onClick={() => handleDeleteRule(rule.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Notifications */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">
-                Notifications
-                {unreadCount > 0 && (
-                  <Badge variant="destructive" className="ml-2">
-                    {unreadCount} unread
-                  </Badge>
-                )}
-              </CardTitle>
-              {unreadCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleMarkAllRead}>
-                  <Check className="mr-1 h-3.5 w-3.5" />
-                  Mark all read
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {notifications.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-muted-foreground">
-                <Bell className="mb-2 h-8 w-8" />
-                <p className="text-sm">No notifications</p>
-                <p className="text-xs">
-                  Click &quot;Check Now&quot; to scan for alerts
-                </p>
-              </div>
-            ) : (
-              <div className="max-h-[500px] space-y-2 overflow-y-auto">
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    className={`rounded-lg border p-3 ${
-                      notif.isRead ? "opacity-60" : "border-amber-200 bg-amber-50/50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium">{notif.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {notif.message}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {new Date(notif.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      {!notif.isRead && (
-                        <button
-                          onClick={() => handleMarkRead(notif.id)}
-                          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
-                          title="Mark as read"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Notifications</h2>
+            <Pill tone="accent" className="ml-2">
+              {unreadCount}
+            </Pill>
+            <span className="grow" />
+            {unreadCount > 0 && (
+              <button className="btn sm ghost" onClick={handleMarkAllRead}>
+                Mark all read
+              </button>
             )}
-          </CardContent>
-        </Card>
+          </div>
+          {notifications.length === 0 ? (
+            <div className="empty" style={{ padding: "2.5rem 1rem" }}>
+              <b>No notifications</b>
+              <span>Click “Check Now” to scan for alerts.</span>
+            </div>
+          ) : (
+            <div className="max-h-[34rem] overflow-y-auto safeen-scroll">
+              {notifications.map((notif) => (
+                <div
+                  key={notif.id}
+                  className={`ntf ${notif.isRead ? "read" : "unread"}`}
+                  onClick={() => !notif.isRead && handleMarkRead(notif.id)}
+                >
+                  <span className="ndot" />
+                  <div className="nb">
+                    <b>{notif.title}</b>
+                    <p>{notif.message}</p>
+                  </div>
+                  <span className="nt">
+                    {new Date(notif.createdAt).toLocaleString("en-US", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add Rule Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Alert Rule</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleAddRule} className="space-y-4">
-            {formError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
-                {formError}
-              </div>
-            )}
+      <FormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        size="md"
+        title="Add alert rule"
+        description="Generate notifications when stock crosses a threshold."
+      >
+        <form onSubmit={handleAddRule} className="space-y-5">
+          {formError && (
+            <div className="rounded-[0.65rem] bg-bad-bg px-3 py-2.5 text-[0.82rem] text-bad">
+              {formError}
+            </div>
+          )}
 
-            <div className="space-y-2">
-              <Label>Alert Type</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          <div className="formgrid">
+            <div className="field span2">
+              <label>Alert type</label>
+              <SelectControl
+                variant="inp"
                 value={newAlertType}
                 onChange={(e) => setNewAlertType(e.target.value)}
               >
-                <option value="REORDER_POINT">Reorder Point — alert when stock hits ROP</option>
-                <option value="LOW_STOCK">Low Stock — alert below custom threshold</option>
-                <option value="OUT_OF_STOCK">Out of Stock — alert when zero</option>
-              </select>
+                <option value="REORDER_POINT">
+                  Reorder Point — uses each item&apos;s ROP
+                </option>
+                <option value="LOW_STOCK">
+                  Low Stock — below a custom threshold
+                </option>
+                <option value="OUT_OF_STOCK">
+                  Out of Stock — exactly zero
+                </option>
+              </SelectControl>
             </div>
 
-            <div className="space-y-2">
-              <Label>Item (leave empty for all items)</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search item..."
-                  className="pl-9"
-                  value={selectedItem ? `${selectedItem.itemCode} — ${selectedItem.description.substring(0, 40)}` : itemSearch}
-                  onChange={(e) => {
-                    setItemSearch(e.target.value);
-                    setSelectedItem(null);
-                    setNewItemId("");
-                  }}
-                  onFocus={() => searchResults.length > 0 && setShowSearch(true)}
-                  onBlur={() => setTimeout(() => setShowSearch(false), 200)}
-                />
-                {searching && (
-                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                )}
-                {showSearch && searchResults.length > 0 && (
-                  <div className="absolute top-full z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border bg-background shadow-lg">
-                    {searchResults.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                        onClick={() => {
-                          setSelectedItem(item);
-                          setNewItemId(item.id);
-                          setShowSearch(false);
-                          setItemSearch("");
-                        }}
-                      >
-                        <span className="font-mono">{item.itemCode}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Stock: {item.availableStock}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+            <div className="field span2">
+              <label>
+                Item <span className="hint">(leave empty for all items)</span>
+              </label>
+              <div className="ta">
+                <label className="control" style={{ width: "100%" }}>
+                  <Search
+                    aria-hidden
+                    style={{ color: "var(--color-faint)" }}
+                  />
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Search item…"
+                    style={{
+                      border: "none",
+                      outline: "none",
+                      background: "transparent",
+                      width: "100%",
+                      fontSize: "0.88rem",
+                    }}
+                    value={
+                      selectedItem
+                        ? `${selectedItem.itemCode} — ${selectedItem.description.substring(0, 40)}`
+                        : itemSearch
+                    }
+                    onChange={(e) => {
+                      setItemSearch(e.target.value);
+                      setSelectedItem(null);
+                      setNewItemId("");
+                    }}
+                    onFocus={() =>
+                      searchResults.length > 0 && setShowSearch(true)
+                    }
+                    onBlur={() => setTimeout(() => setShowSearch(false), 200)}
+                  />
+                  {searching && (
+                    <Loader2 className="size-4 animate-spin text-faint" />
+                  )}
+                </label>
+                <div
+                  className={`ta-drop${showSearch && searchResults.length > 0 ? " open" : ""}`}
+                >
+                  {searchResults.map((item) => (
+                    <div
+                      key={item.id}
+                      className="ta-opt"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSelectedItem(item);
+                        setNewItemId(item.id);
+                        setShowSearch(false);
+                        setItemSearch("");
+                      }}
+                    >
+                      <div>
+                        <div className="strong cellcode">{item.itemCode}</div>
+                        <div className="sub">
+                          {item.description.substring(0, 48)}
+                        </div>
+                      </div>
+                      <div className="meta">
+                        <Pill tone={item.availableStock === 0 ? "red" : "green"}>
+                          {item.availableStock} {item.issueUnit}
+                        </Pill>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               {selectedItem && (
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="mt-1 self-start text-[0.78rem] text-subtle transition hover:text-ink"
                   onClick={() => {
                     setSelectedItem(null);
                     setNewItemId("");
@@ -427,9 +408,10 @@ export default function AlertsPage() {
             </div>
 
             {newAlertType === "LOW_STOCK" && (
-              <div className="space-y-2">
-                <Label>Custom Threshold</Label>
-                <Input
+              <div className="field span2">
+                <label>Threshold</label>
+                <input
+                  className="inp"
                   type="number"
                   min="1"
                   placeholder="Alert when stock drops below this"
@@ -439,30 +421,33 @@ export default function AlertsPage() {
               </div>
             )}
 
-            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-              {newAlertType === "REORDER_POINT" && (
-                <p>Uses each item&apos;s ROP value as the threshold. No custom threshold needed.</p>
-              )}
-              {newAlertType === "LOW_STOCK" && (
-                <p>Set a custom threshold. Alerts fire when stock is above zero but below this number.</p>
-              )}
-              {newAlertType === "OUT_OF_STOCK" && (
-                <p>Alerts when stock reaches exactly zero. No threshold needed.</p>
-              )}
+            <div className="field span2">
+              <div className="rounded-[0.6rem] border border-line-soft bg-field p-3 text-[0.78rem] leading-relaxed text-subtle">
+                {newAlertType === "REORDER_POINT" &&
+                  "Uses each item's ROP value as the threshold. No custom threshold needed."}
+                {newAlertType === "LOW_STOCK" &&
+                  "Alerts fire when stock is above zero but below this number."}
+                {newAlertType === "OUT_OF_STOCK" &&
+                  "Alerts when stock reaches exactly zero. No threshold needed."}
+              </div>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Rule
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          <div className="flex justify-end gap-3 pt-1">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setAddOpen(false)}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn primary" disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Add rule
+            </button>
+          </div>
+        </form>
+      </FormDialog>
     </div>
   );
 }

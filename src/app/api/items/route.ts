@@ -125,21 +125,42 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (initialBalance && initialBalance > 0) {
-    const storeroom = await prisma.storeroom.findUnique({
-      where: { code: storeroomCode || "SSMAIN" },
-    });
+  const startBalance = Math.trunc(Number(initialBalance) || 0);
+  if (startBalance > 0) {
+    // Resolve a storeroom: requested code → SSMAIN → any existing → create one.
+    let storeroom =
+      (await prisma.storeroom.findUnique({
+        where: { code: storeroomCode || "SSMAIN" },
+      })) ?? (await prisma.storeroom.findFirst());
 
-    if (storeroom) {
-      await prisma.inventory.create({
+    if (!storeroom) {
+      storeroom = await prisma.storeroom.create({
         data: {
-          itemId: item.id,
-          storeroomId: storeroom.id,
-          currentBalance: initialBalance,
-          availableBalance: initialBalance,
+          code: "SSMAIN",
+          name: "Main Store - Safeen Survey & Subsea",
+          site: "SS",
         },
       });
     }
+
+    await prisma.inventory.create({
+      data: {
+        itemId: item.id,
+        storeroomId: storeroom.id,
+        currentBalance: startBalance,
+        availableBalance: startBalance,
+      },
+    });
+
+    // Return the item WITH the freshly created stock record.
+    const withStock = await prisma.item.findUnique({
+      where: { id: item.id },
+      include: {
+        commodityGroup: true,
+        inventoryRecords: { include: { storeroom: true } },
+      },
+    });
+    return NextResponse.json(withStock ?? item, { status: 201 });
   }
 
   return NextResponse.json(item, { status: 201 });

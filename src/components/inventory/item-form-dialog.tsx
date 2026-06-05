@@ -1,16 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { FormDialog, NumberField, SelectControl } from "@/components/safeen/ui";
 
 interface ItemFormData {
   itemCode: string;
@@ -29,6 +21,7 @@ interface ItemFormData {
   binLocation: string;
   status: string;
   initialBalance: number;
+  stockBalance: number;
 }
 
 const defaultFormData: ItemFormData = {
@@ -48,6 +41,7 @@ const defaultFormData: ItemFormData = {
   binLocation: "",
   status: "ACTIVE",
   initialBalance: 0,
+  stockBalance: 0,
 };
 
 interface EditableItem {
@@ -67,6 +61,7 @@ interface EditableItem {
   isConsumable: boolean;
   binLocation: string | null;
   status: string;
+  inventoryRecords?: { currentBalance: number }[];
 }
 
 interface ItemFormDialogProps {
@@ -107,6 +102,10 @@ export function ItemFormDialog({
         binLocation: editItem.binLocation || "",
         status: editItem.status || "ACTIVE",
         initialBalance: 0,
+        stockBalance: (editItem.inventoryRecords ?? []).reduce(
+          (s, r) => s + (r.currentBalance || 0),
+          0
+        ),
       });
     } else {
       setForm(defaultFormData);
@@ -153,248 +152,215 @@ export function ItemFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Item" : "Add New Item"}</DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="xl"
+      title={isEdit ? "Edit item" : "Add item"}
+      description="Create or update an inventory item record."
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+            <div className="rounded-[0.65rem] bg-bad-bg px-3 py-2.5 text-[0.82rem] text-bad">
               {error}
             </div>
           )}
 
-          {/* Basic Info */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              Basic Information
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="itemCode">Item Code *</Label>
-                <Input
-                  id="itemCode"
-                  value={form.itemCode}
-                  onChange={(e) => update("itemCode", e.target.value)}
-                  placeholder="SS10000001"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="classDescription">Class / Category</Label>
-                <Input
-                  id="classDescription"
-                  value={form.classDescription}
-                  onChange={(e) => update("classDescription", e.target.value)}
-                  placeholder="CARTRIDGE,PRINTER"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
-              <textarea
-                id="description"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={form.description}
-                onChange={(e) => update("description", e.target.value)}
-                placeholder="Full item description..."
+          <div className="formgrid">
+            <div className="field">
+              <label>
+                Item code <span className="req">*</span>
+              </label>
+              <input
+                className="inp"
+                value={form.itemCode}
+                onChange={(e) => update("itemCode", e.target.value)}
+                placeholder="SBS-00000"
               />
             </div>
-          </div>
+            <div className="field">
+              <label>Category</label>
+              <input
+                className="inp"
+                value={form.classDescription}
+                onChange={(e) => update("classDescription", e.target.value)}
+                placeholder="CARTRIDGE, PRINTER"
+              />
+            </div>
 
-          {/* Manufacturer */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              Manufacturer & Part
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="manufacturer">Manufacturer</Label>
-                <Input
-                  id="manufacturer"
-                  value={form.manufacturer}
-                  onChange={(e) => update("manufacturer", e.target.value)}
-                  placeholder="HEWLETT PACKARD"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="partNumber">Part Number</Label>
-                <Input
-                  id="partNumber"
-                  value={form.partNumber}
-                  onChange={(e) => update("partNumber", e.target.value)}
-                  placeholder="CF400A"
-                />
-              </div>
+            <div className="field span2">
+              <label>
+                Description <span className="req">*</span>
+              </label>
+              <input
+                className="inp"
+                value={form.description}
+                onChange={(e) => update("description", e.target.value)}
+                placeholder="Full item description"
+              />
             </div>
-          </div>
 
-          {/* Units & Quantities */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              Units & Stock
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="orderUnit">Order Unit</Label>
-                <Input
-                  id="orderUnit"
-                  value={form.orderUnit}
-                  onChange={(e) => update("orderUnit", e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="issueUnit">Issue Unit</Label>
-                <Input
-                  id="issueUnit"
-                  value={form.issueUnit}
-                  onChange={(e) => update("issueUnit", e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="averageCost">Avg. Cost</Label>
-                <Input
-                  id="averageCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.averageCost}
-                  onChange={(e) =>
-                    update("averageCost", parseFloat(e.target.value) || 0)
-                  }
-                />
-              </div>
+            <div className="field">
+              <label>Manufacturer</label>
+              <input
+                className="inp"
+                value={form.manufacturer}
+                onChange={(e) => update("manufacturer", e.target.value)}
+                placeholder="HEWLETT PACKARD"
+              />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="reorderPoint">Reorder Point (ROP)</Label>
-                <Input
-                  id="reorderPoint"
-                  type="number"
-                  min="0"
-                  value={form.reorderPoint}
-                  onChange={(e) =>
-                    update("reorderPoint", parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="economicOrderQty">Order Qty (EOQ)</Label>
-                <Input
-                  id="economicOrderQty"
-                  type="number"
-                  min="0"
-                  value={form.economicOrderQty}
-                  onChange={(e) =>
-                    update("economicOrderQty", parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="leadTimeDays">Lead Time (days)</Label>
-                <Input
-                  id="leadTimeDays"
-                  type="number"
-                  min="0"
-                  value={form.leadTimeDays}
-                  onChange={(e) =>
-                    update("leadTimeDays", parseInt(e.target.value) || 0)
-                  }
-                />
-              </div>
+            <div className="field">
+              <label>Part number</label>
+              <input
+                className="inp"
+                value={form.partNumber}
+                onChange={(e) => update("partNumber", e.target.value)}
+                placeholder="CF400A"
+              />
             </div>
-            {!isEdit && (
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="initialBalance">Initial Stock Balance</Label>
-                  <Input
-                    id="initialBalance"
-                    type="number"
-                    min="0"
-                    value={form.initialBalance}
-                    onChange={(e) =>
-                      update("initialBalance", parseInt(e.target.value) || 0)
-                    }
-                  />
-                </div>
+
+            <div className="field">
+              <label>Order unit</label>
+              <input
+                className="inp"
+                value={form.orderUnit}
+                onChange={(e) => update("orderUnit", e.target.value)}
+                placeholder="EA"
+              />
+            </div>
+            <div className="field">
+              <label>Issue unit</label>
+              <input
+                className="inp"
+                value={form.issueUnit}
+                onChange={(e) => update("issueUnit", e.target.value)}
+                placeholder="EA"
+              />
+            </div>
+
+            <div className="field">
+              <label>Average cost (AED)</label>
+              <NumberField
+                min={0}
+                step={0.01}
+                value={form.averageCost}
+                onValueChange={(n) => update("averageCost", n)}
+              />
+            </div>
+            <div className="field">
+              <label>Reorder point (ROP)</label>
+              <NumberField
+                integer
+                min={0}
+                value={form.reorderPoint}
+                onValueChange={(n) => update("reorderPoint", n)}
+              />
+            </div>
+
+            <div className="field">
+              <label>EOQ</label>
+              <NumberField
+                integer
+                min={0}
+                value={form.economicOrderQty}
+                onValueChange={(n) => update("economicOrderQty", n)}
+              />
+            </div>
+            <div className="field">
+              <label>Lead time (days)</label>
+              <NumberField
+                integer
+                min={0}
+                value={form.leadTimeDays}
+                onValueChange={(n) => update("leadTimeDays", n)}
+              />
+            </div>
+
+            {isEdit ? (
+              <div className="field">
+                <label>Stock balance</label>
+                <NumberField
+                  integer
+                  min={0}
+                  value={form.stockBalance}
+                  onValueChange={(n) => update("stockBalance", n)}
+                />
+              </div>
+            ) : (
+              <div className="field">
+                <label>Initial stock balance</label>
+                <NumberField
+                  integer
+                  min={0}
+                  value={form.initialBalance}
+                  onValueChange={(n) => update("initialBalance", n)}
+                />
               </div>
             )}
-          </div>
-
-          {/* Classification */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              Classification
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="criticality">Criticality</Label>
-                <select
-                  id="criticality"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={form.criticality}
-                  onChange={(e) =>
-                    update("criticality", parseInt(e.target.value))
-                  }
-                >
-                  <option value={1}>1 — Critical</option>
-                  <option value={2}>2 — Important</option>
-                  <option value={3}>3 — Standard</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <select
-                  id="status"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={form.status}
-                  onChange={(e) => update("status", e.target.value)}
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="DISCONTINUED">Discontinued</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="binLocation">Bin Location</Label>
-                <Input
-                  id="binLocation"
-                  value={form.binLocation}
-                  onChange={(e) => update("binLocation", e.target.value)}
-                  placeholder="A-01-03"
-                />
-              </div>
+            <div className="field">
+              <label>Bin location</label>
+              <input
+                className="inp"
+                value={form.binLocation}
+                onChange={(e) => update("binLocation", e.target.value)}
+                placeholder="A-00-00"
+              />
             </div>
-            <div className="flex items-center gap-6">
-              <label className="flex items-center gap-2 text-sm">
+
+            <div className="field">
+              <label>Criticality</label>
+              <SelectControl
+                variant="inp"
+                value={form.criticality}
+                onChange={(e) => update("criticality", parseInt(e.target.value))}
+              >
+                <option value={1}>1 — Critical</option>
+                <option value={2}>2 — Important</option>
+                <option value={3}>3 — Standard</option>
+              </SelectControl>
+            </div>
+            <div className="field">
+              <label>Status</label>
+              <SelectControl
+                variant="inp"
+                value={form.status}
+                onChange={(e) => update("status", e.target.value)}
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="DISCONTINUED">Discontinued</option>
+              </SelectControl>
+            </div>
+
+            <div className="field span2">
+              <label className="checkrow">
                 <input
                   type="checkbox"
                   checked={form.isConsumable}
                   onChange={(e) => update("isConsumable", e.target.checked)}
-                  className="rounded border-gray-300"
                 />
-                Consumable
+                <span className="box">
+                  <Check strokeWidth={3.2} />
+                </span>
+                Consumable item
               </label>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
+          <div className="flex justify-end gap-3 pt-1">
+            <button
               type="button"
-              variant="outline"
+              className="btn"
               onClick={() => onOpenChange(false)}
             >
               Cancel
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEdit ? "Save Changes" : "Add Item"}
-            </Button>
+            </button>
+            <button type="submit" className="btn primary" disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {isEdit ? "Save changes" : "Save item"}
+            </button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }
